@@ -1,0 +1,495 @@
+BT BOOKING V2 — ПОЛНАЯ ЛОГИКА И АРХИТЕКТУРА
+
+ПРОЕКТ:
+BT Automazgātava — система онлайн-бронирования ручной автомойки.
+
+REPOSITORY:
+Aleksandr202020/bt-booking_v2
+
+BRANCH:
+main
+
+СТЕК:
+Nuxt 3, Vue 3, TypeScript, Nitro API, PostgreSQL,
+postgres.js, Zod, server-side sessions, Vitest, Vercel, Neon PostgreSQL.
+
+1. ОСНОВНОЙ ПРИНЦИП
+Frontend показывает → Server API проверяет → PostgreSQL окончательно решает.
+
+Нельзя доверять данным из браузера. Цена, категория автомобиля,
+принадлежность автомобиля, доступность времени, права пользователя,
+блокировки и праздники проверяются на сервере.
+
+2. БИЗНЕС-МОДЕЛЬ
+Одна ручная автомойка, один моечный бокс.
+Рабочие часы: 09:00–21:00.
+Часовые слоты:
+09:00–10:00, 10:00–11:00, 11:00–12:00, 12:00–13:00,
+13:00–14:00, 14:00–15:00, 15:00–16:00, 16:00–17:00,
+17:00–18:00, 18:00–19:00, 19:00–20:00, 20:00–21:00.
+
+Одновременно один слот может быть занят только одним активным бронированием.
+
+3. СТАТУСЫ БРОНИРОВАНИЯ
+Активные и блокирующие:
+pending, confirmed
+
+Не блокирующие:
+completed, cancelled_customer, cancelled_admin, no_show
+
+4. КАТАЛОГ АВТОМОБИЛЕЙ
+Каталог принадлежит приложению и хранится локально в PostgreSQL.
+SS.COM не используется во время работы приложения.
+Runtime-запросов к SS.COM быть не должно.
+
+Таблицы:
+vehicle_makes
+vehicle_models
+
+vehicle_makes:
+id, name, source, active, created_at
+
+vehicle_models:
+id, make_id, name, category, source, active, created_at
+
+Для локального каталога source = local.
+
+5. КАТЕГОРИИ И ЦЕНЫ
+passenger  = 25 €
+crossover = 30 €
+minivan    = 35 €
+commercial = 35 €
+
+Примеры:
+Škoda Kamiq → crossover → 30 €
+Opel Zafira → crossover → 30 €
+Volkswagen Caddy → commercial → 35 €
+Citroën Berlingo → commercial → 35 €
+Mercedes V-Class → minivan → 35 €
+
+Цена определяется сервером. Frontend не является источником истины.
+
+6. ПОЛЬЗОВАТЕЛЬ И АВТОМОБИЛЬ
+У пользователя может быть несколько автомобилей.
+При создании booking сервер проверяет:
+- авторизацию;
+- отсутствие бана;
+- существование и активность автомобиля;
+- принадлежность автомобиля пользователю;
+- активность марки/модели;
+- корректность категории.
+
+Чужой car_id использовать нельзя.
+
+7. АВТОРИЗАЦИЯ
+Используется server-side session:
+LOGIN → SESSION TOKEN → HTTPONLY COOKIE → SERVER → SESSION DB → USER
+
+Cookie:
+HttpOnly
+Secure в production
+SameSite=Lax
+Path=/
+
+Срок жизни: 30 дней.
+Токен не хранится в БД открытым текстом; хранится его hash.
+
+8. БАН
+Администратор может BAN/UNBAN пользователя.
+Заблокированный пользователь не может создавать новые booking.
+Бан автоматически не отменяет существующие booking.
+Заблокированный пользователь может отменить уже существующее booking.
+
+9. СОЗДАНИЕ BOOKING
+Клиент:
+1. Открывает Booking.
+2. Выбирает автомобиль.
+3. Выбирает дату.
+4. Получает availability.
+5. Выбирает время.
+6. Видит цену.
+7. Подтверждает.
+
+POST /api/bookings
+
+Сервер проверяет:
+- авторизацию;
+- ban;
+- Zod validation;
+- автомобиль и ownership;
+- активность марки/модели;
+- категорию;
+- дату и время;
+- рабочий день;
+- праздник;
+- blocked time;
+- конфликт booking;
+- серверную цену.
+
+После проверок:
+TRANSACTION → ADVISORY LOCK → RE-CHECK SLOT → INSERT BOOKING → AUDIT → COMMIT
+
+10. РАБОЧЕЕ ВРЕМЯ И ПРАЗДНИКИ
+Рабочее время: 09:00–21:00.
+Закрытые праздничные даты: 23.06 и 24.06.
+Проверка должна выполняться и на frontend, и обязательно на сервере.
+
+11. AVAILABILITY
+Для даты проверяется:
+рабочий день + праздник + whole-day block + slot block + active bookings.
+
+Состояния:
+AVAILABLE
+BOOKED
+BLOCKED
+
+Администратор должен видеть все рабочие слоты, а не только свободные.
+
+12. BLOCKED TIME
+Администратор может заблокировать весь день или отдельный слот.
+Blocked time учитывается при availability, создании, редактировании и manual booking.
+
+Нельзя допускать противоречивое состояние:
+whole-day block + slot-specific block на одну дату.
+Для этого используется защита целостности БД.
+
+13. ЗАЩИТА ОТ ДВОЙНОГО БРОНИРОВАНИЯ
+Нельзя делать только SELECT → проверка → INSERT.
+Два клиента могут одновременно увидеть свободный слот.
+
+Использовать PostgreSQL transaction + advisory lock/row lock + повторную проверку.
+
+REQUEST A → TRANSACTION → LOCK → CHECK → INSERT → COMMIT
+REQUEST B → WAIT → CHECK AGAIN → SLOT OCCUPIED → CONFLICT
+
+Один слот не должен получить два активных booking.
+
+14. ОТМЕНА КЛИЕНТОМ
+Клиент может отменить свою запись.
+Проверяются авторизация, существование, ownership и допустимость отмены.
+
+pending/confirmed → cancelled_customer
+
+После отмены слот снова свободен.
+Заблокированный пользователь может отменить существующий booking.
+
+15. ADMIN
+Все admin API используют requireAdmin.
+Нельзя доверять admin=true или role из frontend.
+
+Разделы:
+Calendar
+All bookings
+Manual booking
+Blocked time
+Banned clients
+Edit booking
+Ban / Unban
+
+16. CALENDAR
+Показывает полное расписание, включая свободные, занятые и заблокированные часы.
+
+17. ALL BOOKINGS
+Администратор может видеть:
+booking ID, date, time, customer, phone, car,
+registration number, category, price, status,
+created_at, updated_at.
+
+18. MANUAL BOOKING
+Администратор может создать запись вручную, например по телефону.
+Manual booking всё равно проходит серверные проверки даты,
+времени, blocked time, конфликта, автомобиля, категории и цены.
+
+19. EDIT BOOKING
+При редактировании снова проверяются новая дата, время,
+автомобиль, категория, цена, blocked time, праздники,
+конфликт, статус и admin permissions.
+
+20. BAN / UNBAN
+ADMIN AUTH → CHANGE USER STATE → AUDIT LOG.
+Существующие booking автоматически не отменяются.
+
+21. AUDIT LOG
+Важные административные и системные действия фиксируются:
+кто, что, когда, какой объект, какое состояние.
+Критические операции и audit должны быть атомарными там, где требуется.
+
+22. API SECURITY
+Каждый endpoint самостоятельно проверяет authentication,
+authorization, input validation, business rules и ownership.
+
+HIDE IN UI ≠ SECURITY
+SECURITY = SERVER VALIDATION
+
+23. ZOD
+Все пользовательские входные данные валидируются Zod:
+make, model, registrationNumber, date, time, bookingId, carId, status и т.д.
+
+24. DATABASE SAFETY
+Использовать параметризованные SQL-запросы.
+Не использовать небезопасную конкатенацию пользовательских строк.
+Критические изменения выполняются в transactions.
+При необходимости: advisory lock, row lock, re-check.
+
+25. SERVER-SIDE PRICE
+Frontend может показать цену, но окончательная цена вычисляется сервером:
+car_id → database → category → server price → booking.
+
+Нельзя доверять цене, присланной пользователем.
+
+26. SERVER-SIDE CATEGORY
+Категория берётся из БД.
+Например, frontend отправил passenger, но БД определяет Caddy как commercial.
+Сервер обязан использовать commercial и цену 35 €.
+
+27. СОЗДАНИЕ АВТОМОБИЛЯ
+POST /api/cars:
+1. Проверить пользователя.
+2. Проверить ban.
+3. Валидировать данные.
+4. Открыть transaction.
+5. Взять vehicle-catalog advisory lock.
+6. Проверить active make.
+7. Проверить active model.
+8. Получить category из БД.
+9. Создать car.
+10. Записать audit.
+11. COMMIT.
+
+28. ИЗМЕНЕНИЕ АВТОМОБИЛЯ
+Аналогичная защита применяется при изменении автомобиля.
+Пользователь не может самостоятельно подменить категорию.
+
+29. RATE LIMITING
+Login rate limit: 10 попыток / 15 минут.
+Rate limit должен быть защищён от race condition.
+
+30. SECURITY HEADERS
+Используются:
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+Referrer-Policy: strict-origin-when-cross-origin
+Permissions-Policy: camera=(), microphone=(), geolocation=()
+Cross-Origin-Resource-Policy: same-origin
+X-Permitted-Cross-Domain-Policies: none
+HSTS в production.
+
+API: Cache-Control: no-store
+
+31. АРХИТЕКТУРА
+
+                 BT BOOKING V2
+                       │
+          ┌────────────┴────────────┐
+          │                         │
+       CUSTOMER                   ADMIN
+          │                         │
+          ↓                         ↓
+     Booking UI                Admin UI
+          │                         │
+          └────────────┬────────────┘
+                       ↓
+                    Nuxt API
+                       │
+       ┌───────────────┼───────────────┐
+       ↓               ↓               ↓
+      AUTH          BOOKING          CATALOG
+       │               │               │
+       └───────────────┼───────────────┘
+                       ↓
+                  PostgreSQL
+                       │
+       ┌───────────────┼───────────────┐
+       ↓               ↓               ↓
+     USERS           CARS          BOOKINGS
+                                       │
+                              ┌────────┴────────┐
+                              ↓                 ↓
+                           BLOCKING           AUDIT
+
+32. CUSTOMER FLOW
+
+LOGIN / REGISTER
+↓
+MY CARS
+↓
+SELECT CAR
+↓
+SELECT DATE
+↓
+GET AVAILABILITY
+↓
+SELECT TIME
+↓
+SERVER CALCULATES PRICE
+↓
+CONFIRM
+↓
+POST /api/bookings
+↓
+AUTH CHECK
+↓
+BAN CHECK
+↓
+CAR OWNERSHIP CHECK
+↓
+CATEGORY CHECK
+↓
+HOLIDAY CHECK
+↓
+BLOCKED TIME CHECK
+↓
+TRANSACTION
+↓
+ADVISORY LOCK
+↓
+RE-CHECK
+↓
+INSERT BOOKING
+↓
+AUDIT
+↓
+COMMIT
+↓
+SUCCESS
+
+33. ADMIN FLOW
+
+ADMIN LOGIN
+↓
+requireAdmin
+↓
+ADMIN PANEL
+↓
+Calendar / All bookings / Manual booking /
+Blocked time / Banned clients / Edit booking / Ban-Unban
+
+Каждая операция:
+ADMIN AUTH
+↓
+INPUT VALIDATION
+↓
+BUSINESS RULES
+↓
+DATABASE TRANSACTION
+↓
+AUDIT
+↓
+COMMIT
+
+34. DATABASE MODEL
+
+USERS
+SESSIONS
+CARS
+VEHICLE MAKES
+VEHICLE MODELS
+BOOKINGS
+BLOCKED TIME
+HOLIDAYS
+AUDIT LOG
+
+CARS связаны с make/model/category.
+BOOKINGS связаны с пользователем и автомобилем.
+
+35. КЛЮЧЕВОЙ ПРИНЦИП CONSISTENCY
+
+Frontend: "время свободно"
+не означает:
+"время гарантированно свободно".
+
+Гарантия возникает только после:
+transaction + lock + re-check + insert + commit
+
+Окончательное состояние системы определяется PostgreSQL.
+
+36. ЧЕГО НЕ ДЕЛАТЬ
+
+НЕ:
+- создавать новый проект;
+- создавать новый GitHub repository;
+- создавать вторую booking system;
+- дублировать booking engine;
+- доверять цене frontend;
+- доверять category frontend;
+- доверять userId frontend;
+- доверять car ownership frontend;
+- проверять availability только на frontend;
+- обращаться frontend напрямую к PostgreSQL;
+- использовать SS.COM runtime;
+- обходить server validation для admin;
+- удалять рабочий функционал без причины;
+- разрушать существующую базу;
+- создавать marker-коммиты без необходимости.
+
+Все изменения выполнять внутри:
+Aleksandr202020/bt-booking_v2
+ветка: main
+
+37. CI
+
+CI должен проверять:
+npm install
+db:migrate
+typecheck
+tests
+build
+
+Тесты:
+npm run test -- --no-file-parallelism
+
+Также:
+npm run typecheck
+npm run build
+
+Нельзя утверждать, что CI зелёный, если соответствующий GitHub Actions run
+реально не был проверен.
+
+38. DATABASE MIGRATIONS
+
+Изменения схемы БД выполняются через миграции.
+Не изменять production schema вручную без соответствующей migration.
+Миграции должны быть последовательными и проверяться CI.
+
+39. БИЗНЕС-ПРАВИЛА
+
+Одна мойка.
+Один бокс.
+09:00–21:00.
+Один час на автомобиль.
+Нет доплаты +5 € за грязный автомобиль.
+
+Цены:
+passenger  → 25 €
+crossover → 30 €
+minivan    → 35 €
+commercial → 35 €
+
+Позиционирование:
+"Максимальное качество за ограниченное время."
+
+40. ЦЕЛЬ СИСТЕМЫ
+
+BT Booking должен работать как production booking engine
+для реальной ручной автомойки.
+
+Главные свойства:
+SECURE
+CONSISTENT
+CONCURRENT-SAFE
+SERVER-VALIDATED
+DATABASE-DRIVEN
+AUDITABLE
+ADMIN-CONTROLLED
+MOBILE-FRIENDLY
+
+Главное правило:
+
+КЛИЕНТ МОЖЕТ ПРОСИТЬ.
+FRONTEND МОЖЕТ ПОКАЗЫВАТЬ.
+SERVER ПРОВЕРЯЕТ.
+DATABASE РЕШАЕТ.
+
+============================================================
+КОНЕЦ СПЕЦИФИКАЦИИ BT BOOKING V2
+============================================================

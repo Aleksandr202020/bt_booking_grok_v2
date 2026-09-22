@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/login",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "BT Automazgātava",
+      "hasCanvas": false,
+      "bodyTextLen": 293,
+      "bodyTextHash": "5e50ea7b2e6937659baaa773093aa23f20c0720662d98cb5fa5f4d868bbc372f",
+      "bodyTextPrefix": "BT Automazgātava RĪGA · 1 BOKS Rezervēt Automašīnas Manas reizes",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/login.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "BT Automazgātava",
+      "hasCanvas": false,
+      "bodyTextLen": 266,
+      "bodyTextHash": "d5ba269efbef27a35cf07a82b4c161bb3237708257ebcf8861e202df274aedbf",
+      "bodyTextPrefix": "BT Automazgātava RĪGA · 1 BOKS Ienākt KONTS Ienākt Rezervācijai ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/login-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/login.json"
+}

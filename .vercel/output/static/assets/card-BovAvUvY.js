@@ -1,0 +1,1 @@
+import{O as e}from"./preload-helper-B5ayHjiR.js";import{x as t}from"./functions-D28UrMz9.js";var n=e();function r({className:e,...r}){return(0,n.jsx)(`div`,{className:t(`rounded-xl border border-border bg-surface p-5 md:p-6`,e),...r})}export{r as t};

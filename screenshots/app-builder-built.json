@@ -1,0 +1,38 @@
+{
+  "url": "http://127.0.0.1:8081/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "BT Automazgātava",
+      "hasCanvas": false,
+      "bodyTextLen": 804,
+      "bodyTextHash": "52bdbbd5199d2935a57a33cf46bebd8d0c2d7552bb5664ab063e908b5fb26999",
+      "bodyTextPrefix": "BT Automazgātava RĪGA · 1 BOKS Rezervēt Automašīnas Manas reizes",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "BT Automazgātava",
+      "hasCanvas": false,
+      "bodyTextLen": 770,
+      "bodyTextHash": "e455d09f95655766a8d7820d8366b6761cd8da1ff3232479a77ba1e059e07523",
+      "bodyTextPrefix": "BT Automazgātava RĪGA · 1 BOKS BT AUTOMAZGĀTAVA · RĪGA Roku mazg",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-built.json",
+  "divergesFromBaseline": false,
+  "baselineReasons": []
+}
