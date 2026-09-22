@@ -21,14 +21,14 @@ function Home() {
             Maksimālā kvalitāte ierobežotā laikā. Bez piemaksas par netīrību.
             Darba laiks 09:00–21:00.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Button asChild size="lg">
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <Button asChild size="lg" className="w-full sm:w-auto">
               <Link to="/booking">Rezervēt laiku</Link>
             </Button>
-            <Button asChild size="lg" variant="secondary">
+            <Button asChild size="lg" variant="secondary" className="w-full sm:w-auto">
               <Link to="/register">Reģistrēties</Link>
             </Button>
-            <Button asChild size="lg" variant="secondary">
+            <Button asChild size="lg" variant="secondary" className="w-full sm:w-auto">
               <Link to="/login">Ienākt</Link>
             </Button>
           </div>

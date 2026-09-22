@@ -58,11 +58,11 @@ function NavLinks({ onClick, admin }: { onClick?: () => void; admin: boolean }) 
 function AuthSlot() {
   const { user, isPending } = useCurrentUserState();
   if (isPending) {
-    return <div className="h-8 w-24 animate-pulse rounded-full bg-surface-2" />;
+    return <div className="hidden h-8 w-24 animate-pulse rounded-full bg-surface-2 md:block" />;
   }
   if (!user) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="hidden items-center gap-2 md:flex">
         <Button asChild size="sm" variant="secondary">
           <Link to="/register">Reģistrēties</Link>
         </Button>
@@ -73,6 +73,25 @@ function AuthSlot() {
     );
   }
   return <UserButton />;
+}
+
+function MobileAuthLinks({ onClick }: { onClick: () => void }) {
+  const { user, isPending } = useCurrentUserState();
+  if (isPending || user) return null;
+  return (
+    <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
+      <Button asChild className="w-full" size="lg">
+        <Link to="/register" onClick={onClick}>
+          Reģistrēties
+        </Link>
+      </Button>
+      <Button asChild className="w-full" size="lg" variant="secondary">
+        <Link to="/login" onClick={onClick}>
+          Ienākt
+        </Link>
+      </Button>
+    </div>
+  );
 }
 
 export function SiteHeader() {
@@ -108,6 +127,7 @@ export function SiteHeader() {
         <div className="border-t border-border px-4 py-3 md:hidden">
           <nav className="flex flex-col">
             <NavLinks admin={admin} onClick={() => setOpen(false)} />
+            <MobileAuthLinks onClick={() => setOpen(false)} />
           </nav>
         </div>
       ) : null}
