@@ -62,9 +62,14 @@ function AuthSlot() {
   }
   if (!user) {
     return (
-      <Button asChild size="sm">
-        <Link to="/login">Ienākt</Link>
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button asChild size="sm" variant="secondary">
+          <Link to="/register">Reģistrēties</Link>
+        </Button>
+        <Button asChild size="sm">
+          <Link to="/login">Ienākt</Link>
+        </Button>
+      </div>
     );
   }
   return <UserButton />;

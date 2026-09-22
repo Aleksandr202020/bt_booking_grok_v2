@@ -26,6 +26,9 @@ function Home() {
               <Link to="/booking">Rezervēt laiku</Link>
             </Button>
             <Button asChild size="lg" variant="secondary">
+              <Link to="/register">Reģistrēties</Link>
+            </Button>
+            <Button asChild size="lg" variant="secondary">
               <Link to="/login">Ienākt</Link>
             </Button>
           </div>
