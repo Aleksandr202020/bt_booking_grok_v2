@@ -1,0 +1,27 @@
+name: Remove prebuilt .vercel/output
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Remove .vercel directory
+        run: |
+          if [ -d .vercel ]; then
+            git rm -r .vercel
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "Remove prebuilt .vercel/output — force clean Vercel builds"
+            git push origin HEAD
+            echo "Removed .vercel and pushed."
+          else
+            echo ".vercel not present — nothing to do."
+          fi
