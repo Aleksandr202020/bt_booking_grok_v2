@@ -1,1 +1,0 @@
-var e={passenger:2500,crossover:3e3,minivan:3500,commercial:3500},t={passenger:`Pasažieru auto`,crossover:`Crossover / SUV`,minivan:`Minivans`,commercial:`Komerctransports`};function n(t){return t in e?e[t]:e.passenger}export{n,t};
