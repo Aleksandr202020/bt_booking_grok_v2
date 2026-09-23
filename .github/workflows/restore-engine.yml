@@ -1,0 +1,123 @@
+name: Restore engine.ts
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/restore-engine.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Restore engine and apply ADMIN_EMAILS
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout 752f3b952be7b38fef8f96b31fbd70eff5f9396d -- src/server/engine.ts
+
+          python3 << 'PY'
+          from pathlib import Path
+          path = Path("src/server/engine.ts")
+          text = path.read_text()
+          old = '''export async function ensureProfile(sql: Sql, userId: string): Promise<ProfileRow> {
+            await sql`select pg_advisory_xact_lock(hashtext('bt-booking:profile-bootstrap'))`;
+            const existing = await sql<ProfileRow>`
+              select user_id, phone, role, banned, ban_reason
+              from profiles
+              where user_id = ${userId}
+              limit 1
+            `;
+            if (existing[0]) return existing[0];
+
+            const admins = await sql<{ n: number }>`
+              select count(*)::int as n from profiles where role = 'admin'
+            `;
+            const role = (admins[0]?.n ?? 0) === 0 ? "admin" : "customer";
+            const inserted = await sql<ProfileRow>`
+              insert into profiles (user_id, role)
+              values (${userId}, ${role})
+              on conflict (user_id) do update set updated_at = profiles.updated_at
+              returning user_id, phone, role, banned, ban_reason
+            `;
+            return inserted[0]!;
+          }'''
+          # normalize spaces - read exact from file
+          import re
+          m = re.search(r"export async function ensureProfile\(sql: Sql, userId: string\): Promise<ProfileRow> \{[\s\S]*?\n\}", text)
+          if not m:
+              raise SystemExit("ensureProfile not found")
+          new = '''/** Comma-separated admin emails from Vercel env ADMIN_EMAILS (case-insensitive). */
+          function adminEmailsFromEnv(): Set<string> {
+            const raw = process.env.ADMIN_EMAILS?.trim();
+            if (!raw) return new Set();
+            return new Set(
+              raw
+                .split(",")
+                .map((e) => e.trim().toLowerCase())
+                .filter(Boolean),
+            );
+          }
+
+          function isAdminEmail(email: string | null | undefined): boolean {
+            if (!email) return false;
+            return adminEmailsFromEnv().has(email.trim().toLowerCase());
+          }
+
+          export async function ensureProfile(sql: Sql, userId: string): Promise<ProfileRow> {
+            await sql`select pg_advisory_xact_lock(hashtext('bt-booking:profile-bootstrap'))`;
+            const existing = await sql<ProfileRow>`
+              select user_id, phone, role, banned, ban_reason
+              from profiles
+              where user_id = ${userId}
+              limit 1
+            `;
+
+            const identity = await loadUserIdentity(sql, userId);
+            const emailIsAdmin = isAdminEmail(identity.email);
+
+            if (existing[0]) {
+              if (emailIsAdmin && existing[0].role !== "admin") {
+                const updated = await sql<ProfileRow>`
+                  update profiles
+                  set role = 'admin', updated_at = now()
+                  where user_id = ${userId}
+                  returning user_id, phone, role, banned, ban_reason
+                `;
+                return updated[0]!;
+              }
+              return existing[0];
+            }
+
+            const admins = await sql<{ n: number }>`
+              select count(*)::int as n from profiles where role = 'admin'
+            `;
+            const role =
+              emailIsAdmin || (admins[0]?.n ?? 0) === 0 ? "admin" : "customer";
+            const inserted = await sql<ProfileRow>`
+              insert into profiles (user_id, role)
+              values (${userId}, ${role})
+              on conflict (user_id) do update set updated_at = profiles.updated_at
+              returning user_id, phone, role, banned, ban_reason
+            `;
+            return inserted[0]!;
+          }'''
+          # Dedent new to match file style (2-space)
+          import textwrap
+          new = textwrap.dedent(new)
+          text = text[:m.start()] + new + text[m.end():]
+          path.write_text(text)
+          print("patched ok", path.stat().st_size)
+          PY
+
+          git add src/server/engine.ts
+          git commit -m "fix: restore engine.ts and add ADMIN_EMAILS promotion" || echo "no changes"
+          git push
