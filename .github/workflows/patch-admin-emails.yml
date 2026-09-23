@@ -1,0 +1,104 @@
+name: Patch ADMIN_EMAILS
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/patch-admin-emails.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Apply ADMIN_EMAILS patch
+        run: |
+          set -e
+          python3 << 'PY'
+          from pathlib import Path
+          path = Path("src/server/engine.ts")
+          text = path.read_text()
+          if "adminEmailsFromEnv" in text:
+              print("already patched")
+              raise SystemExit(0)
+          needle = "export async function ensureProfile(sql: Sql, userId: string): Promise<ProfileRow> {"
+          idx = text.find(needle)
+          if idx < 0:
+              raise SystemExit("ensureProfile not found")
+          # find end of function: next export async function after idx
+          rest = text[idx + len(needle):]
+          end_rel = rest.find("\nexport async function ")
+          if end_rel < 0:
+              raise SystemExit("end not found")
+          end = idx + len(needle) + end_rel
+          replacement = '''/** Comma-separated admin emails from Vercel env ADMIN_EMAILS (case-insensitive). */
+function adminEmailsFromEnv(): Set<string> {
+  const raw = process.env.ADMIN_EMAILS?.trim();
+  if (!raw) return new Set();
+  return new Set(
+    raw
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+function isAdminEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return adminEmailsFromEnv().has(email.trim().toLowerCase());
+}
+
+export async function ensureProfile(sql: Sql, userId: string): Promise<ProfileRow> {
+  await sql`select pg_advisory_xact_lock(hashtext('bt-booking:profile-bootstrap'))`;
+  const existing = await sql<ProfileRow>`
+    select user_id, phone, role, banned, ban_reason
+    from profiles
+    where user_id = ${userId}
+    limit 1
+  `;
+
+  const identity = await loadUserIdentity(sql, userId);
+  const emailIsAdmin = isAdminEmail(identity.email);
+
+  if (existing[0]) {
+    if (emailIsAdmin && existing[0].role !== "admin") {
+      const updated = await sql<ProfileRow>`
+        update profiles
+        set role = 'admin', updated_at = now()
+        where user_id = ${userId}
+        returning user_id, phone, role, banned, ban_reason
+      `;
+      return updated[0]!;
+    }
+    return existing[0];
+  }
+
+  const admins = await sql<{ n: number }>`
+    select count(*)::int as n from profiles where role = 'admin'
+  `;
+  const role =
+    emailIsAdmin || (admins[0]?.n ?? 0) === 0 ? "admin" : "customer";
+  const inserted = await sql<ProfileRow>`
+    insert into profiles (user_id, role)
+    values (${userId}, ${role})
+    on conflict (user_id) do update set updated_at = profiles.updated_at
+    returning user_id, phone, role, banned, ban_reason
+  `;
+  return inserted[0]!;
+}
+'''
+          text = text[:idx] + replacement + text[end:]
+          path.write_text(text)
+          print("patched", path.stat().st_size)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/server/engine.ts
+          git diff --cached --stat
+          git commit -m "feat: promote ADMIN_EMAILS from Vercel env to admin role" || echo "nothing to commit"
+          git push
